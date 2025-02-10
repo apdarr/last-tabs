@@ -20,16 +20,20 @@ export async function fetchTabs(): Promise<any[]> {
     storedTabs = [];
   }
 
-  // 3. Merge new active tabs (avoid duplicate URLs)
+  // 3. Merge new active tabs at the start (avoid duplicate URLs)
   for (const active of activeTabs) {
-    if (!storedTabs.some((tab) => tab.url === active.url)) {
-      storedTabs.push(active);
+    const existingIndex = storedTabs.findIndex((tab) => tab.url === active.url);
+    if (existingIndex !== -1) {
+      // Remove existing entry
+      storedTabs.splice(existingIndex, 1);
     }
+    // Add new tab at the beginning
+    storedTabs.unshift(active);
   }
 
-  // 4. Trim the stored list to last 50 entries
+  // 4. Trim the stored list to last 50 entries (from start)
   if (storedTabs.length > 50) {
-    storedTabs = storedTabs.slice(-50);
+    storedTabs = storedTabs.slice(0, 50);
   }
 
   // 5. Write back the updated store

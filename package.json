@@ -3,8 +3,6 @@
   "name": "last-active-tabs",
   "title": "Last Active Tabs",
   "description": "See last tabs",
-  "interval": "10s",
-  "mode": "no-view",
   "icon": "extension-icon.png",
   "author": "apdarr",
   "license": "MIT",
@@ -14,6 +12,13 @@
       "title": "Last tabs",
       "description": "See your most recent active tabs",
       "mode": "view"
+    },
+    {
+      "name": "background-fetch",
+      "title": "Update Tabs",
+      "description": "Background tab update",
+      "mode": "no-view",
+      "interval": "10s"
     }
   ],
   "dependencies": {
