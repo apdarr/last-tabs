@@ -1,7 +1,7 @@
 import { ActionPanel, environment, List, Action, Icon } from "@raycast/api";
 import { usePromise, useFrecencySorting } from "@raycast/utils";
 import { fetchTabs } from "./fetch-tabs";
-import { focusTabInBrowser } from "./utils/focus-tab";
+import { focusOrOpenTab } from "./utils/tab-actions";
 
 interface Tab {
   id: number;
@@ -29,10 +29,10 @@ export default function Command() {
           actions={
             <ActionPanel>
               <Action
-                title="Focus Tab"
+                title="Focus or Open Tab"
                 icon={Icon.Eye}
                 onAction={async () => {
-                  await focusTabInBrowser(tab.url);
+                  await focusOrOpenTab(tab.url);
                   visitItem(tab);
                 }}
               />
