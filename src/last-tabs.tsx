@@ -1,6 +1,7 @@
 import { ActionPanel, environment, List, Action, Icon } from "@raycast/api";
 import { usePromise, useFrecencySorting } from "@raycast/utils";
 import { fetchTabs } from "./fetch-tabs";
+import { focusTabInBrowser } from "./utils/focus-tab";
 
 interface Tab {
   id: number;
@@ -27,7 +28,14 @@ export default function Command() {
           icon={Icon.Globe}
           actions={
             <ActionPanel>
-              <Action.OpenInBrowser url={tab.url} onOpen={() => visitItem(tab)} />
+              <Action
+                title="Focus Tab"
+                icon={Icon.Eye}
+                onAction={async () => {
+                  await focusTabInBrowser(tab.url);
+                  visitItem(tab);
+                }}
+              />
               <Action.CopyToClipboard content={tab.url} onCopy={() => visitItem(tab)} />
               <Action title="Reset Ranking" icon={Icon.ArrowCounterClockwise} onAction={() => resetRanking(tab)} />
             </ActionPanel>
