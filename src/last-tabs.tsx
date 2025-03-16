@@ -2,6 +2,7 @@ import { ActionPanel, environment, List, Action, Icon } from "@raycast/api";
 import { usePromise, useFrecencySorting } from "@raycast/utils";
 import { fetchTabs } from "./fetch-tabs";
 import { focusOrOpenTab } from "./utils/tab-actions";
+import { closeMainWindow } from "@raycast/api";
 
 interface Tab {
   id: number;
@@ -16,7 +17,7 @@ export default function Command() {
   const { data: tabs, isLoading } = usePromise(fetchTabs);
   // Convert numeric id to string before using frecency sorting
   const stringTabs = (tabs ?? []).map((tab: Tab) => ({ ...tab, id: String(tab.id) }));
-  const { data: sortedTabs, visitItem, resetRanking } = useFrecencySorting<Tab>(stringTabs);
+  const { data: sortedTabs, visitItem, resetRanking } = useFrecencySorting(stringTabs);
 
   return (
     <List isLoading={isLoading}>
@@ -34,6 +35,7 @@ export default function Command() {
                 onAction={async () => {
                   await focusOrOpenTab(tab.url);
                   visitItem(tab);
+                  await closeMainWindow({ clearRootSearch: true });
                 }}
               />
               <Action.CopyToClipboard content={tab.url} onCopy={() => visitItem(tab)} />
@@ -43,5 +45,6 @@ export default function Command() {
         />
       ))}
     </List>
+
   );
 }
