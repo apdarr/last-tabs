@@ -1,35 +1,34 @@
-import { BrowserExtension } from "@raycast/api";
 import fs from "fs/promises";
 import path from "path";
+import os from "os";
 
-const STORE_PATH = path.join(__dirname, "tabs-store.json");
+const DATA_FILE_PATH = path.join(os.homedir(), ".raycast-last-tabs.json");
 
-export async function fetchTabs(): Promise<any[]> {
-  const currentTabs = await BrowserExtension.getTabs();
-  const activeTabs = currentTabs.filter((tab: any) => tab.active);
-  
-  let storedTabs: any[] = [];
+interface TabData {
+  id: number;
+  title: string;
+  url: string;
+  lastAccessed: number;
+  favIconUrl?: string;
+}
+
+interface TabHistoryData {
+  tabs: TabData[];
+  lastUpdated: number;
+}
+
+export async function fetchTabs(): Promise<TabData[]> {
   try {
-    const storedData = await fs.readFile(STORE_PATH, "utf8");
-    storedTabs = JSON.parse(storedData);
-  } catch (e) {
-    storedTabs = [];
+    // Read from the file that Chrome extension writes to
+    const fileContent = await fs.readFile(DATA_FILE_PATH, "utf8");
+    const data: TabHistoryData = JSON.parse(fileContent);
+    
+    // Return tabs sorted by most recent first (they should already be sorted)
+    return data.tabs || [];
+  } catch (error) {
+    console.error("Error reading tab data:", error);
+    
+    // Return empty array if file doesn't exist or can't be read
+    return [];
   }
-
-  // Merge new active tabs at the start, removing any duplicates first
-  for (const active of activeTabs) {
-    // Remove any existing entries with the same URL
-    storedTabs = storedTabs.filter(tab => tab.url !== active.url);
-    // Add new tab at the beginning
-    storedTabs.unshift(active);
-    // make sure there are no duplicates
-    storedTabs = storedTabs.filter((tab, index, self) => index === self.findIndex(t => t.url === tab.url));
-  }
-
-  if (storedTabs.length > 50) {
-    storedTabs = storedTabs.slice(0, 50);
-  }
-
-  await fs.writeFile(STORE_PATH, JSON.stringify(storedTabs, null, 2), "utf8");
-  return storedTabs;
 }

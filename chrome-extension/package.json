@@ -1,0 +1,13 @@
+{
+  "name": "last-tabs-chrome-extension",
+  "version": "1.0.0",
+  "description": "Chrome extension that tracks tab activity for Raycast integration",
+  "main": "background.js",
+  "scripts": {
+    "server": "node tab-server.js",
+    "start": "node tab-server.js"
+  },
+  "keywords": ["chrome-extension", "tabs", "raycast"],
+  "author": "Your Name",
+  "license": "MIT"
+}

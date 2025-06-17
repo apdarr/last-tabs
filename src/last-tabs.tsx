@@ -1,5 +1,5 @@
 import { ActionPanel, environment, List, Action, Icon } from "@raycast/api";
-import { usePromise, useFrecencySorting } from "@raycast/utils";
+import { usePromise } from "@raycast/utils";
 import { fetchTabs } from "./fetch-tabs";
 import { focusOrOpenTab } from "./utils/tab-actions";
 import { closeMainWindow } from "@raycast/api";
@@ -8,25 +8,26 @@ interface Tab {
   id: number;
   title: string;
   url: string;
-  active: boolean;
-  // ...other fields...
+  lastAccessed: number;
+  favIconUrl?: string;
 }
 
 export default function Command() {
   console.log("launchType", environment.launchType);
   const { data: tabs, isLoading } = usePromise(fetchTabs);
-  // Convert numeric id to string before using frecency sorting
-  const stringTabs = (tabs ?? []).map((tab: Tab) => ({ ...tab, id: String(tab.id) }));
-  const { data: sortedTabs, visitItem, resetRanking } = useFrecencySorting(stringTabs);
 
   return (
     <List isLoading={isLoading}>
-      {sortedTabs.map((tab) => (
+      {(tabs || []).map((tab: Tab, index: number) => (
         <List.Item
-          key={tab.id}
+          key={`${tab.id}-${tab.url}`}
           title={tab.title || "Untitled"}
           subtitle={tab.url}
-          icon={Icon.Globe}
+          icon={tab.favIconUrl || Icon.Globe}
+          accessories={[
+            { text: `#${index + 1}` },
+            { text: new Date(tab.lastAccessed).toLocaleTimeString() }
+          ]}
           actions={
             <ActionPanel>
               <Action
@@ -34,17 +35,30 @@ export default function Command() {
                 icon={Icon.Eye}
                 onAction={async () => {
                   await focusOrOpenTab(tab.url);
-                  visitItem(tab);
                   await closeMainWindow({ clearRootSearch: true });
                 }}
               />
-              <Action.CopyToClipboard content={tab.url} onCopy={() => visitItem(tab)} />
-              <Action title="Reset Ranking" icon={Icon.ArrowCounterClockwise} onAction={() => resetRanking(tab)} />
+              <Action.CopyToClipboard 
+                content={tab.url} 
+                title="Copy URL"
+                shortcut={{ modifiers: ["cmd"], key: "c" }}
+              />
+              <Action.CopyToClipboard 
+                content={tab.title || "Untitled"} 
+                title="Copy Title"
+                shortcut={{ modifiers: ["cmd", "shift"], key: "c" }}
+              />
             </ActionPanel>
           }
         />
       ))}
+      {!isLoading && (!tabs || tabs.length === 0) && (
+        <List.EmptyView
+          title="No previous tabs found"
+          description="Switch between a few tabs in Chrome to start building your history. Note: The current active tab is excluded from this list."
+          icon={Icon.Globe}
+        />
+      )}
     </List>
-
   );
 }
