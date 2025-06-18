@@ -13,7 +13,7 @@ chrome.runtime.onInstalled.addListener(() => {
   loadTabHistory();
 });
 
-// Track tab activation
+// Track tab activation (when user switches tabs)
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
   console.log('🔄 Tab activated:', activeInfo.tabId);
   try {
@@ -30,32 +30,20 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
   }
 });
 
-// Track tab updates (when URL changes)
+// Only track tab updates when they become active (not on every page load)
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  if (changeInfo.status === 'complete' && tab.active && tab.url) {
+  // Only update if tab became active AND the URL changed
+  if (changeInfo.status === 'complete' && tab.active && changeInfo.url && tab.url) {
+    console.log('🔄 Active tab URL changed:', tab.url);
     if (!tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://')) {
       updateTabHistory(tab);
     }
   }
 });
 
-// Track when tabs are created and immediately active
-chrome.tabs.onCreated.addListener(async (tab) => {
-  if (tab.active && tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://')) {
-    updateTabHistory(tab);
-  }
-});
-
-// Handle messages from content scripts
+// Handle messages from popup and external requests
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'pageVisible') {
-    // Update tab info when page becomes visible
-    chrome.tabs.get(sender.tab.id, (tab) => {
-      if (tab && tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://')) {
-        updateTabHistory(tab);
-      }
-    });
-  } else if (request.action === 'getTabHistory') {
+  if (request.action === 'getTabHistory') {
     // Get the currently active tab to exclude it from the popup display
     chrome.tabs.query({ active: true, currentWindow: true })
       .then(([activeTab]) => {
@@ -73,8 +61,46 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     tabAccessHistory = [];
     saveTabHistory();
     sendResponse({ success: true });
+  } else if (request.action === 'focusTab') {
+    // Handle tab focusing from Raycast
+    focusOrCreateTab(request.url).then((result) => {
+      sendResponse(result);
+    });
+    return true; // Will respond asynchronously
   }
 });
+
+async function focusOrCreateTab(url) {
+  try {
+    console.log('🎯 Attempting to focus tab:', url);
+    
+    // First, try to find an existing tab with this URL
+    const tabs = await chrome.tabs.query({ url: url });
+    
+    if (tabs.length > 0) {
+      // Found existing tab, focus it
+      const existingTab = tabs[0];
+      console.log('✅ Found existing tab, focusing:', existingTab.id);
+      
+      // Focus the window first
+      await chrome.windows.update(existingTab.windowId, { focused: true });
+      
+      // Then activate the tab
+      await chrome.tabs.update(existingTab.id, { active: true });
+      
+      return { success: true, action: 'focused', tabId: existingTab.id };
+    } else {
+      // No existing tab found, create a new one
+      console.log('➕ No existing tab found, creating new tab');
+      const newTab = await chrome.tabs.create({ url: url, active: true });
+      
+      return { success: true, action: 'created', tabId: newTab.id };
+    }
+  } catch (error) {
+    console.error('❌ Error focusing/creating tab:', error);
+    return { success: false, error: error.message };
+  }
+}
 
 function updateTabHistory(tab) {
   console.log('📝 Updating tab history for:', tab.url);
@@ -204,3 +230,31 @@ chrome.runtime.onMessageExternal.addListener((request, sender, sendResponse) => 
     return true; // Will respond asynchronously
   }
 });
+
+// Poll the local server for focus-tab requests
+const FOCUS_TAB_POLL_INTERVAL = 1000; // ms
+let lastFocusedTabId = null;
+
+async function pollFocusTab() {
+  try {
+    const res = await fetch('http://127.0.0.1:8987/focus-tab-poll');
+    if (res.ok) {
+      const data = await res.json();
+      if (data && typeof data.tabId === 'number' && data.tabId !== lastFocusedTabId) {
+        // Focus the tab
+        chrome.tabs.get(data.tabId, (tab) => {
+          if (chrome.runtime.lastError || !tab) return;
+          chrome.windows.update(tab.windowId, { focused: true }, () => {
+            chrome.tabs.update(tab.id, { active: true });
+            lastFocusedTabId = tab.id;
+          });
+        });
+      }
+    }
+  } catch (e) {
+    // Ignore errors
+  }
+  setTimeout(pollFocusTab, FOCUS_TAB_POLL_INTERVAL);
+}
+
+pollFocusTab();

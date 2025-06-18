@@ -3,6 +3,7 @@ import { usePromise } from "@raycast/utils";
 import { fetchTabs } from "./fetch-tabs";
 import { focusOrOpenTab } from "./utils/tab-actions";
 import { closeMainWindow } from "@raycast/api";
+import { useEffect } from "react";
 
 interface Tab {
   id: number;
@@ -14,7 +15,14 @@ interface Tab {
 
 export default function Command() {
   console.log("launchType", environment.launchType);
-  const { data: tabs, isLoading } = usePromise(fetchTabs);
+  
+  const { data: tabs, isLoading, revalidate } = usePromise(fetchTabs);
+
+  // Force reload every time the command is launched
+  useEffect(() => {
+    console.log("🔄 Command mounted, forcing data reload...");
+    revalidate();
+  }, [revalidate]);
 
   return (
     <List isLoading={isLoading}>
@@ -34,7 +42,13 @@ export default function Command() {
                 title="Focus or Open Tab"
                 icon={Icon.Eye}
                 onAction={async () => {
-                  await focusOrOpenTab(tab.url);
+                  if (tab.id) {
+                    // Try focusing by tabId first
+                    await focusOrOpenTab(tab.url, tab.id);
+                  } else {
+                    // Fall back to URL-based focusing
+                    await focusOrOpenTab(tab.url);
+                  }
                   await closeMainWindow({ clearRootSearch: true });
                 }}
               />
@@ -48,6 +62,15 @@ export default function Command() {
                 title="Copy Title"
                 shortcut={{ modifiers: ["cmd", "shift"], key: "c" }}
               />
+              <Action
+                title="Refresh List"
+                icon={Icon.ArrowClockwise}
+                shortcut={{ modifiers: ["cmd"], key: "r" }}
+                onAction={() => {
+                  console.log("🔄 Manual refresh triggered");
+                  revalidate();
+                }}
+              />
             </ActionPanel>
           }
         />
@@ -57,6 +80,18 @@ export default function Command() {
           title="No previous tabs found"
           description="Switch between a few tabs in Chrome to start building your history. Note: The current active tab is excluded from this list."
           icon={Icon.Globe}
+          actions={
+            <ActionPanel>
+              <Action
+                title="Refresh List"
+                icon={Icon.ArrowClockwise}
+                onAction={() => {
+                  console.log("🔄 Manual refresh from empty view");
+                  revalidate();
+                }}
+              />
+            </ActionPanel>
+          }
         />
       )}
     </List>

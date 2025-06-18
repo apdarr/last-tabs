@@ -34,11 +34,12 @@ npm run dev
 
 ## How It Works
 
-1. **Chrome Extension**: Tracks every tab activation, creation, and URL change
+1. **Chrome Extension**: Tracks tab activation and URL changes (not page loads)
 2. **Smart Filtering**: Excludes the currently active tab from the history list
-3. **Data Storage**: Tab data is sent to a local HTTP server that writes to `~/.raycast-last-tabs.json`
-4. **Raycast Extension**: Reads the JSON file and displays tabs in order of most recent access
-5. **Quick Access**: First item in list is always your "previous" tab, perfect for quick switching
+3. **Tab Focusing**: Uses Chrome API to focus existing tabs by ID through a local server
+4. **Data Storage**: Tab data is sent to a local HTTP server that writes to `~/.raycast-last-tabs.json`
+5. **Raycast Extension**: Reads the JSON file and displays tabs in order of most recent access
+6. **Quick Access**: First item in list is always your "previous" tab, perfect for quick switching
 
 ## Features
 
@@ -97,9 +98,10 @@ The JSON file contains:
    - Try reloading the extension
 
 3. **Server connection issues**:
-   - The server is optional - data will still be stored locally
+   - The server is required for tab focusing functionality
    - Make sure port 8987 is not blocked
    - Check server logs for errors
+   - Run the server using the setup script `./setup.sh`
 
 ## Development
 

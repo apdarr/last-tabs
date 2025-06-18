@@ -50,10 +50,27 @@ else
     echo "❌ Chrome doesn't appear to be running"
 fi
 
+# Check if local server is running
+if curl -s http://127.0.0.1:8987/health > /dev/null; then
+    echo "✅ Tab server is running on port 8987"
+    # Test the focus-tab endpoint
+    echo "🧪 Testing tab focus endpoint..."
+    response=$(curl -s -X POST -H "Content-Type: application/json" -d '{"tabId": 999999}' http://127.0.0.1:8987/focus-tab)
+    if [[ "$response" == *"success"* ]]; then
+        echo "✅ Tab focus endpoint is working"
+    else
+        echo "❌ Tab focus endpoint returned: $response"
+    fi
+else
+    echo "❌ Tab server is not running"
+    echo "   Run: cd chrome-extension && node tab-server.js"
+fi
+
 echo ""
 echo "Next steps:"
 echo "1. Open Chrome and go to chrome://extensions/"
 echo "2. Find 'Last Tabs Tracker' and click 'Inspect views: background page'"
 echo "3. In the console that opens, switch between tabs"
 echo "4. Look for messages like 'Tab history updated: X tabs'"
-echo "5. If you see errors, copy them and share"
+echo "5. Check that the background script is polling the focus-tab-poll endpoint"
+echo "6. If you see errors, copy them and share"
