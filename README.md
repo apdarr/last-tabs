@@ -13,9 +13,9 @@ This project consists of two parts:
 3. Click "Load unpacked" and select the `chrome-extension` folder
 4. The extension should now be installed and tracking your tab activity
 
-### 2. Start the Tab Tracking Server (Optional but Recommended)
+### 2. Start the Tab Tracking Server
 
-For real-time updates, start the local server that receives data from Chrome:
+For tab data storage, start the local server that receives data from Chrome:
 
 ```bash
 cd chrome-extension
@@ -36,15 +36,18 @@ npm run dev
 
 1. **Chrome Extension**: Tracks tab activation and URL changes (not page loads)
 2. **Smart Filtering**: Excludes the currently active tab from the history list
-3. **Tab Focusing**: Uses Chrome API to focus existing tabs by ID through a local server
+3. **Tab Focusing**: Uses AppleScript to focus existing tabs and activate Chrome
 4. **Data Storage**: Tab data is sent to a local HTTP server that writes to `~/.raycast-last-tabs.json`
-5. **Raycast Extension**: Reads the JSON file and displays tabs in order of most recent access
+5. **Raycast Extension**: Reads the JSON file with stale-while-revalidate caching
 6. **Quick Access**: First item in list is always your "previous" tab, perfect for quick switching
 
 ## Features
 
 - **Real-time tracking**: Every tab switch is immediately recorded
 - **Smart ordering**: Most recent tabs first, **excluding the current active tab**
+- **Instant response**: Uses stale-while-revalidate caching for immediate tab display
+- **Works from any app**: Activates Chrome and focuses the correct tab even when in other applications
+- **Auto-refresh**: Fresh data loaded automatically when opening Raycast
 - **Quick switching**: Perfect for bouncing between your last 2-3 tabs
 - **No duplicates**: Same URL moves to top, no repeats
 - **Persistent history**: Survives browser restarts
@@ -98,10 +101,15 @@ The JSON file contains:
    - Try reloading the extension
 
 3. **Server connection issues**:
-   - The server is required for tab focusing functionality
+   - The server is required for tab data storage
    - Make sure port 8987 is not blocked
    - Check server logs for errors
    - Run the server using the setup script `./setup.sh`
+
+4. **Tab focusing not working**:
+   - Make sure Chrome is installed and running
+   - Grant necessary permissions to Raycast when prompted for AppleScript execution
+   - Check that the URLs match exactly (AppleScript looks for exact URL matches)
 
 ## Development
 

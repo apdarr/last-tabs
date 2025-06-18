@@ -56,51 +56,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       .catch(() => {
         sendResponse({ tabs: tabAccessHistory });
       });
-    return true; // Will respond asynchronously
-  } else if (request.action === 'clearHistory') {
+    return true; // Will respond asynchronously    } else if (request.action === 'clearHistory') {
     tabAccessHistory = [];
     saveTabHistory();
     sendResponse({ success: true });
-  } else if (request.action === 'focusTab') {
-    // Handle tab focusing from Raycast
-    focusOrCreateTab(request.url).then((result) => {
-      sendResponse(result);
-    });
-    return true; // Will respond asynchronously
   }
 });
-
-async function focusOrCreateTab(url) {
-  try {
-    console.log('🎯 Attempting to focus tab:', url);
-    
-    // First, try to find an existing tab with this URL
-    const tabs = await chrome.tabs.query({ url: url });
-    
-    if (tabs.length > 0) {
-      // Found existing tab, focus it
-      const existingTab = tabs[0];
-      console.log('✅ Found existing tab, focusing:', existingTab.id);
-      
-      // Focus the window first
-      await chrome.windows.update(existingTab.windowId, { focused: true });
-      
-      // Then activate the tab
-      await chrome.tabs.update(existingTab.id, { active: true });
-      
-      return { success: true, action: 'focused', tabId: existingTab.id };
-    } else {
-      // No existing tab found, create a new one
-      console.log('➕ No existing tab found, creating new tab');
-      const newTab = await chrome.tabs.create({ url: url, active: true });
-      
-      return { success: true, action: 'created', tabId: newTab.id };
-    }
-  } catch (error) {
-    console.error('❌ Error focusing/creating tab:', error);
-    return { success: false, error: error.message };
-  }
-}
 
 function updateTabHistory(tab) {
   console.log('📝 Updating tab history for:', tab.url);
@@ -230,31 +191,3 @@ chrome.runtime.onMessageExternal.addListener((request, sender, sendResponse) => 
     return true; // Will respond asynchronously
   }
 });
-
-// Poll the local server for focus-tab requests
-const FOCUS_TAB_POLL_INTERVAL = 1000; // ms
-let lastFocusedTabId = null;
-
-async function pollFocusTab() {
-  try {
-    const res = await fetch('http://127.0.0.1:8987/focus-tab-poll');
-    if (res.ok) {
-      const data = await res.json();
-      if (data && typeof data.tabId === 'number' && data.tabId !== lastFocusedTabId) {
-        // Focus the tab
-        chrome.tabs.get(data.tabId, (tab) => {
-          if (chrome.runtime.lastError || !tab) return;
-          chrome.windows.update(tab.windowId, { focused: true }, () => {
-            chrome.tabs.update(tab.id, { active: true });
-            lastFocusedTabId = tab.id;
-          });
-        });
-      }
-    }
-  } catch (e) {
-    // Ignore errors
-  }
-  setTimeout(pollFocusTab, FOCUS_TAB_POLL_INTERVAL);
-}
-
-pollFocusTab();

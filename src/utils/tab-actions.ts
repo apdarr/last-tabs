@@ -1,53 +1,107 @@
-import { BrowserExtension, open, environment } from "@raycast/api";
+import { runAppleScript } from "@raycast/utils";
+import { open } from "@raycast/api";
 
-export async function focusTabById(tabId: number): Promise<void> {
-  try {
-    await fetch("http://127.0.0.1:8987/focus-tab", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tabId }),
-    });
-  } catch (e) {
-    // fallback: do nothing
+// Arc-specific AppleScript 
+const scriptFocusArcTabByUrl = (url: string) => `
+tell application "Arc"
+    if not running then
+        error "Arc is not running"
+    end if
+    
+    activate
+    set foundTab to false
+    set targetURL to "${url.replace(/"/g, '\\"').replace(/\\/g, '\\\\')}"
+    
+    repeat with aTab in every tab of first window
+        set currentURL to URL of aTab
+        if currentURL is equal to targetURL then
+            set foundTab to true
+            tell aTab to select
+            exit repeat 
+        end if
+    end repeat
+    
+    if foundTab is false then
+        error "Tab not found"
+    end if
+end tell
+`;
+
+// Chromium-based browser AppleScript
+const scriptFocusChromiumTabByUrl = (browserName: string, url: string) => `
+tell application "${browserName}"
+    if not running then
+        error "${browserName} is not running"
+    end if
+    
+    activate
+    set foundTab to false
+    set targetURL to "${url.replace(/"/g, '\\"').replace(/\\/g, '\\\\')}"
+    
+    repeat with aWindow in every window
+        repeat with aTab in every tab of aWindow
+            set tabURL to URL of aTab
+            if tabURL is equal to targetURL then
+                set foundTab to true
+                set index of aWindow to 1
+                set active tab index of aWindow to index of aTab
+                exit repeat
+            end if
+        end repeat
+        if foundTab then exit repeat
+    end repeat
+    
+    if not foundTab then
+        error "Tab not found"
+    end if
+end tell
+`;
+
+// Detect which supported browser is running
+async function detectRunningBrowser(): Promise<string | null> {
+  const browsers = ["Arc", "Google Chrome", "Chromium", "Brave Browser"];
+
+  for (const browser of browsers) {
+    try {
+      const script = `tell application "System Events" to (name of processes) contains "${browser}"`;
+      const result = await runAppleScript(script);
+      if (result === "true") {
+        console.log(`✅ Detected running browser: ${browser}`);
+        return browser;
+      }
+    } catch (error) {
+      // Ignore errors (e.g., browser not installed)
+    }
   }
+
+  console.log("❌ No supported running browser detected.");
+  return null;
 }
 
-export async function focusOrOpenTab(url: string, tabId?: number): Promise<void> {
+export async function focusOrOpenTab(url: string): Promise<void> {
   try {
-    console.log("🎯 Attempting to focus/open tab:", url, tabId ? `with ID ${tabId}` : "without ID");
-    
-    // If we have a tabId, try to focus it directly
-    if (typeof tabId === "number") {
-      console.log("✅ Using tabId to focus:", tabId);
-      await focusTabById(tabId);
+    console.log(`🎯 Attempting to focus tab: ${url}`);
+    const browserName = await detectRunningBrowser();
+
+    if (browserName) {
+      let script: string;
+      
+      if (browserName === "Arc") {
+        script = scriptFocusArcTabByUrl(url);
+      } else {
+        script = scriptFocusChromiumTabByUrl(browserName, url);
+      }
+      
+      await runAppleScript(script);
+      console.log(`✅ Successfully focused tab in ${browserName}`);
       return;
     }
-    
-    // Check if Raycast Browser Extension is available
-    if (!environment.canAccess(BrowserExtension)) {
-      console.log("❌ Browser Extension not available, using fallback");
-      await open(url);
-      return;
-    }
-    
-    // Get all tabs from browser
-    const tabs = await BrowserExtension.getTabs();
-    console.log("📋 Found", tabs.length, "open tabs");
-    
-    // Look for a tab with the exact URL
-    const existingTab = tabs.find(tab => tab.url === url);
-    
-    if (existingTab && typeof existingTab.id === "number") {
-      console.log("✅ Found existing tab with matching URL and id", existingTab.id);
-      await focusTabById(existingTab.id);
-      return;
-    }
-    // No existing tab, open a new one
-    await open(url);
-    console.log("✅ New tab opened successfully");
+
+    // Fallback if no running browser is found
+    throw new Error("No running supported browser detected to focus tab.");
   } catch (error) {
-    console.error("❌ Error with tab focusing:", error);
-    // Fallback: use standard open function
+    console.log(`⚠️ Could not focus existing tab, opening new one: ${error}`);
+    // If focusing fails for any reason, open the URL as a fallback.
     await open(url);
   }
 }
