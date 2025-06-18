@@ -34,7 +34,7 @@ echo ""
 # Check if extension data file exists
 if [ -f ~/.raycast-last-tabs.json ]; then
     echo "✅ Data file exists at ~/.raycast-last-tabs.json"
-    echo "📄 Current contents:"
+    echo " Current contents:"
     cat ~/.raycast-last-tabs.json | jq . 2>/dev/null || cat ~/.raycast-last-tabs.json
     echo ""
 else
