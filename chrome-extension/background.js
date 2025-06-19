@@ -22,6 +22,12 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
     if (tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://')) {
       console.log('✅ Valid tab, updating history');
       updateTabHistory(tab);
+      
+      // Force immediate save to ensure Raycast gets updated data quickly
+      setTimeout(() => {
+        console.log('🚀 Force saving after tab activation');
+        saveTabHistory();
+      }, 100);
     } else {
       console.log('❌ Skipping tab (chrome:// or extension URL)');
     }
@@ -56,7 +62,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       .catch(() => {
         sendResponse({ tabs: tabAccessHistory });
       });
-    return true; // Will respond asynchronously    } else if (request.action === 'clearHistory') {
+    return true; // Will respond asynchronously
+  } else if (request.action === 'clearHistory') {
     tabAccessHistory = [];
     saveTabHistory();
     sendResponse({ success: true });
@@ -65,13 +72,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 function updateTabHistory(tab) {
   console.log('📝 Updating tab history for:', tab.url);
+  console.log('📌 Tab pinned status:', tab.pinned);
+  console.log('🔍 Tab active status:', tab.active);
+  
   const now = Date.now();
   const tabInfo = {
     id: tab.id,
     title: tab.title || 'Untitled',
     url: tab.url,
     lastAccessed: now,
-    favIconUrl: tab.favIconUrl
+    favIconUrl: tab.favIconUrl,
+    pinned: tab.pinned || false // Track pinned status for debugging
   };
 
   // Remove any existing entry for this URL
@@ -84,6 +95,7 @@ function updateTabHistory(tab) {
   }
   
   // Add to the beginning of the array (most recent first)
+  // This ensures that even pinned tabs get moved to the top when accessed
   tabAccessHistory.unshift(tabInfo);
   console.log(`➕ Added tab to position 0. Total tabs: ${tabAccessHistory.length}`);
   
