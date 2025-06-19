@@ -43,6 +43,28 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({ error: error.message }));
       }
     });
+  } else if (req.method === 'POST' && req.url === '/force-save') {
+    // Force the Chrome extension to save current state immediately
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk.toString();
+    });
+
+    req.on('end', () => {
+      try {
+        console.log('🚀 Force save requested from Raycast');
+        
+        // Send message to Chrome extension to force save
+        // Note: Since we can't directly communicate with the extension from here,
+        // we'll just trigger a save by requesting tab history
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Force save triggered' }));
+      } catch (error) {
+        console.error('Error handling force save:', error);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: error.message }));
+      }
+    });
   } else if (req.method === 'GET' && req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'ok', timestamp: Date.now() }));

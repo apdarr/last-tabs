@@ -23,11 +23,9 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
       console.log('✅ Valid tab, updating history');
       updateTabHistory(tab);
       
-      // Force immediate save to ensure Raycast gets updated data quickly
-      setTimeout(() => {
-        console.log('🚀 Force saving after tab activation');
-        saveTabHistory();
-      }, 100);
+      // Force immediate save to ensure Raycast gets updated data ASAP
+      console.log('🚀 Force saving immediately after tab activation');
+      await saveTabHistory();
     } else {
       console.log('❌ Skipping tab (chrome:// or extension URL)');
     }
@@ -97,7 +95,7 @@ function updateTabHistory(tab) {
   // Add to the beginning of the array (most recent first)
   // This ensures that even pinned tabs get moved to the top when accessed
   tabAccessHistory.unshift(tabInfo);
-  console.log(`➕ Added tab to position 0. Total tabs: ${tabAccessHistory.length}`);
+  console.log(`➕ Added tab to position 0 with timestamp ${now}. Total tabs: ${tabAccessHistory.length}`);
   
   // Keep only the most recent MAX_TABS
   if (tabAccessHistory.length > MAX_TABS) {
@@ -105,8 +103,8 @@ function updateTabHistory(tab) {
     console.log(`✂️ Trimmed to ${MAX_TABS} tabs`);
   }
 
-  // Save to storage and file
-  console.log('💾 Saving tab history...');
+  // Save to storage and file immediately - no delays for real-time updates
+  console.log('💾 Saving tab history immediately...');
   saveTabHistory();
 }
 

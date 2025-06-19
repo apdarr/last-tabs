@@ -1,53 +1,131 @@
-# Last Tabs - Chrome Extension + Raycast Integration
+# Last Active Tabs - Raycast Extension
 
-This project consists of two parts:
-1. A Chrome extension that tracks your tab activity in real-time
-2. A Raycast extension that displays your most recently accessed tabs
-
-## Setup Instructions
-
-### 1. Install the Chrome Extension
-
-1. Open Chrome and navigate to `chrome://extensions/`
-2. Enable "Developer mode" in the top right
-3. Click "Load unpacked" and select the `chrome-extension` folder
-4. The extension should now be installed and tracking your tab activity
-
-### 2. Start the Tab Tracking Server
-
-For tab data storage, start the local server that receives data from Chrome:
-
-```bash
-cd chrome-extension
-node tab-server.js
-```
-
-This will start a server on `http://127.0.0.1:8987` that receives tab data from the Chrome extension.
-
-### 3. Install/Update the Raycast Extension
-
-The Raycast extension will read tab data from `~/.raycast-last-tabs.json`:
-
-```bash
-npm run dev
-```
-
-## How It Works
-
-1. **Chrome Extension**: Tracks tab activation and URL changes (not page loads)
-2. **Smart Filtering**: Excludes the currently active tab from the history list
-3. **Tab Focusing**: Uses AppleScript to focus existing tabs and activate Chrome
-4. **Data Storage**: Tab data is sent to a local HTTP server that writes to `~/.raycast-last-tabs.json`
-5. **Raycast Extension**: Reads the JSON file with stale-while-revalidate caching
-6. **Quick Access**: First item in list is always your "previous" tab, perfect for quick switching
+A smart Raycast extension that tracks and shows your most recently accessed browser tabs across Chrome, Safari, and Arc browsers using native AppleScript integration.
 
 ## Features
 
-- **Real-time tracking**: Every tab switch is immediately recorded
-- **Smart ordering**: Most recent tabs first, **excluding the current active tab**
-- **Instant response**: Uses stale-while-revalidate caching for immediate tab display
-- **Works from any app**: Activates Chrome and focuses the correct tab even when in other applications
-- **Auto-refresh**: Fresh data loaded automatically when opening Raycast
+✨ **Multi-Browser Support**: Works with Chrome, Safari, and Arc browsers  
+🎯 **Smart Tab Focusing**: Automatically detects which browser a tab belongs to and focuses it  
+📊 **Intelligent Ranking**: Uses both access frequency and recency to rank tabs  
+💾 **Persistent History**: Stores tab access history using Raycast LocalStorage  
+🔄 **Automatic Sync**: Records tab access whenever Raycast opens/closes  
+🚀 **Zero Configuration**: No browser extensions required - uses native AppleScript  
+
+## How It Works
+
+1. **Raycast Lifecycle Integration**: When you open Raycast, the extension records your current active tab and fetches all open tabs from supported browsers using AppleScript.
+
+2. **Smart Ranking**: Tabs are ranked by:
+   - **Last Access Time**: When you last looked at/focused a tab
+   - **Access Frequency**: How often you visit a tab
+   - **Recency Boost**: Recently accessed tabs (within the last hour) get priority
+
+3. **Cross-Browser Tab Detection**: The extension automatically detects which browser a tab belongs to and can focus tabs across Chrome, Safari, and Arc seamlessly.
+
+4. **History Persistence**: All tab access data is stored locally using Raycast's LocalStorage API and also integrates with any existing Chrome extension data for backward compatibility.
+
+## Installation
+
+1. Clone or download this repository
+2. Open the folder in your terminal
+3. Install dependencies: `npm install`
+4. Build the extension: `npm run build`
+5. Install in Raycast: `npm run publish` or manually import the built extension
+
+## Usage
+
+1. Open Raycast (`Cmd + Space`)
+2. Type "Last tabs" or use your configured hotkey
+3. Browse your recently accessed tabs, ranked by recency and frequency
+4. Press Enter or click on a tab to focus it in its original browser
+5. Use `Cmd + R` to manually refresh the tab list
+6. Use `Cmd + Shift + Delete` to clear your tab history
+
+## Keyboard Shortcuts
+
+- **Enter**: Focus the selected tab
+- **Cmd + C**: Copy tab URL
+- **Cmd + Shift + C**: Copy tab title  
+- **Cmd + R**: Refresh tab list
+- **Cmd + Shift + Delete**: Clear tab history
+- **Cmd + Shift + D**: Show debug information
+
+## Browser Compatibility
+
+### Supported Browsers
+- **Google Chrome**: Full support including tab focusing
+- **Safari**: Full support including tab focusing  
+- **Arc**: Full support with native Arc tab IDs
+
+### Browser Requirements
+- Browsers must be running and have accessibility permissions
+- No browser extensions required (pure AppleScript integration)
+
+## Privacy & Data
+
+- All data is stored locally on your machine using Raycast LocalStorage
+- No data is sent to external servers
+- Tab history can be cleared at any time
+- Chrome extension integration is optional and provides additional accuracy
+
+## Troubleshooting
+
+### Tabs not appearing?
+1. Make sure your browsers are running
+2. Try refreshing with `Cmd + R`
+3. Check that you have some browsing history (visit a few tabs first)
+
+### Can't focus tabs?
+1. Ensure browsers have accessibility permissions in macOS System Preferences
+2. Check that the target browser is running
+3. Try opening the URL manually as a fallback
+
+### Performance issues?
+1. Clear tab history with `Cmd + Shift + Delete` if it gets too large
+2. The extension limits display to the top 20 most recent tabs for performance
+
+## Development
+
+```bash
+# Install dependencies
+npm install
+
+# Start development mode
+npm run dev
+
+# Build for production
+npm run build
+
+# Lint and fix code
+npm run fix-lint
+```
+
+## Architecture
+
+The extension consists of several key components:
+
+- **`browser-tabs.ts`**: AppleScript integration for fetching tabs from Chrome, Safari, and Arc
+- **`tab-history.ts`**: Tab access tracking and history management using LocalStorage
+- **`tab-actions.ts`**: Smart tab focusing across multiple browsers
+- **`refresh-handler.ts`**: Raycast lifecycle integration and data synchronization
+- **`last-tabs.tsx`**: Main UI component with smart filtering and ranking
+
+## Migration from Chrome Extension
+
+If you were using the previous version with a Chrome extension:
+
+1. Your existing history data will be automatically imported
+2. The Chrome extension will continue to work for additional accuracy
+3. You can disable the Chrome extension - the new version works without it
+4. All data will be migrated to Raycast LocalStorage for better performance
+
+## Contributing
+
+Feel free to submit issues and enhancement requests! This extension is designed to be lightweight and fast while providing smart tab management across all major browsers.
+
+## License
+
+MIT License - see LICENSE file for details.
 - **Quick switching**: Perfect for bouncing between your last 2-3 tabs
 - **No duplicates**: Same URL moves to top, no repeats
 - **Persistent history**: Survives browser restarts

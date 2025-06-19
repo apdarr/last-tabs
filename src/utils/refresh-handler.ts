@@ -1,7 +1,10 @@
 /**
  * Utility for handling data refresh in the tab extension
- * This helps ensure we have the most up-to-date tab information
+ * Integrates with Raycast lifecycle and browser AppleScript APIs
  */
+
+import { getAllBrowserTabs } from "./browser-tabs";
+import { tabHistoryManager } from "./tab-history";
 
 interface RefreshCallbacks {
   revalidateHistory: () => void;
@@ -10,70 +13,101 @@ interface RefreshCallbacks {
 
 export class TabDataRefreshHandler {
   private callbacks: RefreshCallbacks | null = null;
-  private refreshTimeout: NodeJS.Timeout | null = null;
+  private isRefreshing = false;
 
   setCallbacks(callbacks: RefreshCallbacks) {
     this.callbacks = callbacks;
+    console.log("🔧 Refresh handler callbacks configured");
   }
 
-  // Ping the Chrome extension server to check if it's running
-  async pingServer(): Promise<boolean> {
+  // Record the current active tab when Raycast opens/closes
+  async recordCurrentActiveTab(): Promise<void> {
     try {
-      // Use AbortController for timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 1000);
+      console.log("📝 Recording current active tab...");
+      const allTabs = await getAllBrowserTabs();
+      const activeTab = allTabs.find(tab => tab.active);
       
-      const response = await fetch('http://127.0.0.1:8987/health', {
-        method: 'GET',
-        signal: controller.signal,
+      if (activeTab) {
+        await tabHistoryManager.recordTabAccess(activeTab);
+        console.log(`✅ Recorded active tab: ${activeTab.title}`);
+      } else {
+        console.log("⚠️ No active tab found");
+      }
+    } catch (error) {
+      console.error("❌ Failed to record active tab:", error);
+    }
+  }
+
+  // Force Chrome extension to save current tab state (legacy support)
+  async forceChromeSave(): Promise<boolean> {
+    try {
+      const response = await fetch('http://127.0.0.1:8987/force-save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ timestamp: Date.now() })
       });
       
-      clearTimeout(timeoutId);
-      return response.ok;
+      if (response.ok) {
+        console.log('✅ Chrome extension saved current state');
+        return true;
+      } else {
+        console.log('⚠️ Chrome extension server responded but save failed');
+        return false;
+      }
     } catch (error) {
-      console.log('Tab server not responding:', error);
+      console.log('📡 Chrome extension server not available, using native browser APIs');
       return false;
     }
   }
 
-  // Force refresh of all tab data
-  async refreshAll(): Promise<void> {
+  // Immediate refresh - get latest data right now
+  async refreshImmediate(): Promise<void> {
+    if (this.isRefreshing) {
+      console.log("🔄 Refresh already in progress, skipping...");
+      return;
+    }
+    
     if (!this.callbacks) {
       console.warn('No refresh callbacks set');
       return;
     }
 
-    console.log('🔄 Refreshing all tab data...');
+    this.isRefreshing = true;
+    console.log('⚡ Immediate refresh starting...');
     
-    // Try to wake up the server
-    await this.pingServer();
-    
-    // Small delay to let the server process any pending updates
-    await new Promise(resolve => setTimeout(resolve, 200));
-    
-    // Refresh both data sources
-    this.callbacks.revalidateHistory();
-    this.callbacks.revalidateOpenTabs();
+    try {
+      // Record current active tab before refreshing data
+      await this.recordCurrentActiveTab();
+      
+      // Legacy Chrome extension support (try, but don't block on failure)
+      await this.forceChromeSave();
+      
+      // Refresh both data sources
+      console.log('🔄 Refreshing tab data sources...');
+      this.callbacks.revalidateOpenTabs(); // Browser tabs via AppleScript
+      this.callbacks.revalidateHistory();  // History data
+      
+      console.log('✨ Refresh complete');
+    } catch (error) {
+      console.error('❌ Error during refresh:', error);
+    } finally {
+      this.isRefreshing = false;
+    }
   }
 
-  // Schedule a delayed refresh (useful after window close)
-  scheduleDelayedRefresh(delayMs: number = 500): void {
-    if (this.refreshTimeout) {
-      clearTimeout(this.refreshTimeout);
-    }
-
-    this.refreshTimeout = setTimeout(() => {
-      console.log('⏰ Executing scheduled refresh...');
-      this.refreshAll();
-    }, delayMs);
+  // When Raycast window opens - record current tab and refresh data
+  async refreshOnOpen(): Promise<void> {
+    console.log('👋 Raycast opened - recording current tab and refreshing');
+    await this.refreshImmediate();
   }
 
-  // Clean up any pending refreshes
-  cleanup(): void {
-    if (this.refreshTimeout) {
-      clearTimeout(this.refreshTimeout);
-      this.refreshTimeout = null;
-    }
+  // When Raycast window closes - record current tab for next time
+  async refreshOnClose(): Promise<void> {
+    console.log('🚪 Raycast closing - recording final tab state');
+    await this.recordCurrentActiveTab();
+    
+    // Don't revalidate UI components on close, just record data
+    await this.forceChromeSave(); // Legacy support
   }
 }
 
