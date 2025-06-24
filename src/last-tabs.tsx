@@ -6,14 +6,14 @@ import {
   closeMainWindow, 
   showToast, 
   Toast,
-  environment
+  environment,
+  BrowserExtension
 } from "@raycast/api";
 import { usePromise } from "@raycast/utils";
 import { focusOrOpenTab } from "./utils/tab-actions";
-import { tabRefreshHandler } from "./utils/refresh-handler";
-import { getAllBrowserTabs } from "./utils/browser-tabs";
+import { getAllBrowserTabs, Tab } from "./utils/browser-tabs";
 import { tabHistoryManager } from "./utils/tab-history";
-import { useMemo, useEffect } from "react";
+import { useEffect } from "react";
 
 export default function Command() {
   // Initialize tab history manager
@@ -21,173 +21,149 @@ export default function Command() {
     tabHistoryManager.initialize();
   }, []);
 
-  // Primary data source: Browser tabs via AppleScript
-  const { data: allTabs, isLoading: isLoadingTabs, revalidate: revalidateTabs } = usePromise(async () => {
-    console.log("🔄 Fetching tabs from all browsers...");
-    const tabs = await getAllBrowserTabs();
-    console.log(`� Total tabs fetched: ${tabs.length}`);
-    return tabs;
-  }, []);
+  // Check if Browser Extension is available
+  const canAccessBrowserExtension = environment.canAccess(BrowserExtension);
 
-  // Get tab history data for ranking
-  const { data: tabsWithHistory, isLoading: isLoadingHistory, revalidate: revalidateHistory } = usePromise(
-    async (tabs) => {
-      if (!tabs || tabs.length === 0) {
-        return [];
-      }
-      console.log("📚 Getting tab history for ranking...");
-      const tabsWithHistory = await tabHistoryManager.getTabHistory(tabs);
-      return tabsWithHistory;
-    }, 
-    [allTabs]
-  );
-
-  // Find the active tab (to exclude from results)
-  const activeTab = useMemo(() => {
-    return allTabs?.find(tab => tab.active) || null;
-  }, [allTabs]);
-
-  // Build the final sorted list - exclude active tab and filter by history
-  const sortedTabs = useMemo(() => {
-    if (!tabsWithHistory || tabsWithHistory.length === 0) {
-      console.log("⚠️ No tabs with history available");
+  // Fetch tabs using Raycast Browser Extension and merge with Chrome extension recency data
+  const { data: sortedTabs, isLoading, revalidate } = usePromise(async () => {
+    console.log("🔄 Fetching tabs...");
+    
+    if (!canAccessBrowserExtension) {
+      console.log("❌ Browser Extension not available");
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "Browser Extension Required",
+        message: "Please install the Raycast Browser Extension"
+      });
       return [];
     }
 
-    console.log("🧮 Processing tabs - Total with history:", tabsWithHistory.length, "Active tab:", activeTab?.title || 'none');
-
-    // Filter out the active tab and tabs with no history data
-    const validTabs = tabsWithHistory.filter(tab => {
-      // Skip the active tab (most important filter)
-      if (tab.active) {
-        console.log("🚫 Excluding active tab:", tab.title);
-        return false;
-      }
-      
-      // Only show tabs that have some history (were accessed before)
-      if (tab.lastAccessed === 0) {
-        return false;
-      }
-      
-      return true;
-    });
-
-    console.log("✅ Valid tabs after filtering:", validTabs.length);
-
-    // Tabs are already sorted by lastAccessed in the history manager
-    const sorted = validTabs.slice(0, 20); // Limit to top 20 for performance
-
-    console.log("🎯 Final sorted tabs:", sorted.length);
-    console.log("📋 Top 3:", sorted.slice(0, 3).map(t => ({ 
-      title: t.title, 
-      lastAccessed: new Date(t.lastAccessed).toLocaleString(),
-      accessCount: t.accessCount
-    })));
+    // Get current browser tabs using Raycast API
+    const currentTabs = await getAllBrowserTabs();
+    console.log(`📱 Found ${currentTabs.length} current tabs from Browser Extension`);
     
-    return sorted;
-  }, [tabsWithHistory, activeTab]);
+    // Get tab history with Chrome extension recency data
+    const tabsWithHistory = await tabHistoryManager.getTabHistory(currentTabs);
+    console.log(`📚 Got history for ${tabsWithHistory.length} tabs`);
+    
+    // Filter out only the active tab, but keep ALL other tabs (including ones without recency data)
+    const filteredTabs = tabsWithHistory
+      .filter(tab => !tab.active) // Only exclude active tab
+      .sort((a, b) => {
+        // Sort by recency: tabs with lastAccessed > 0 go first (sorted by recency)
+        // tabs with lastAccessed = 0 go after (no particular order)
+        if (a.lastAccessed === 0 && b.lastAccessed === 0) return 0; // Both have no history
+        if (a.lastAccessed === 0) return 1; // a has no history, goes after b
+        if (b.lastAccessed === 0) return -1; // b has no history, goes after a
+        return b.lastAccessed - a.lastAccessed; // Both have history, sort by recency
+      })
+      .slice(0, 50); // Limit to top 50 for performance
+    
+    console.log(`✅ Returning ${filteredTabs.length} tabs (including ${filteredTabs.filter(t => t.lastAccessed === 0).length} without recency data)`);
+    return filteredTabs;
+  }, []);
 
-  // Set up refresh handler and lifecycle management
-  useEffect(() => {
-    // Configure the refresh handler with our revalidation functions
-    tabRefreshHandler.setCallbacks({
-      revalidateHistory: revalidateHistory,
-      revalidateOpenTabs: revalidateTabs,
-    });
+  const handleTabSelection = async (tab: Tab) => {
+    try {
+      // Record this access in our history (updates Chrome extension data)
+      await tabHistoryManager.recordTabAccess(tab);
+      
+      // Focus the tab using AppleScript
+      await focusOrOpenTab(tab.url, {
+        title: tab.title,
+        favicon: tab.favicon
+      });
+      
+      await closeMainWindow();
+    } catch (error) {
+      console.error("Error selecting tab:", error);
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "Failed to open tab",
+        message: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  };
 
-    // Immediate refresh when extension opens
-    console.log('🎬 Extension opening, triggering refresh...');
-    tabRefreshHandler.refreshOnOpen();
+  const formatLastAccessed = (timestamp: number): string => {
+    if (timestamp === 0) return "No history";
+    
+    const diff = Date.now() - timestamp;
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    
+    if (days > 0) return `${days}d ago`;
+    if (hours > 0) return `${hours}h ago`;
+    if (minutes > 0) return `${minutes}m ago`;
+    return "Just now";
+  };
 
-    // Cleanup function for when the component unmounts (Raycast window closes)
-    return () => {
-      console.log('🚪 Extension window closing, recording final state...');
-      tabRefreshHandler.refreshOnClose();
-    };
-  }, [revalidateHistory, revalidateTabs]);
-
-  const isLoading = isLoadingTabs || isLoadingHistory;
+  if (!canAccessBrowserExtension) {
+    return (
+      <List>
+        <List.EmptyView
+          title="Browser Extension Required"
+          description="Please install the Raycast Browser Extension to use this feature"
+          icon={Icon.ExclamationMark}
+        />
+      </List>
+    );
+  }
 
   return (
-    <List isLoading={isLoading} searchBarPlaceholder="Search recent tabs...">
-      {sortedTabs.map((tab, index) => (
+    <List 
+      isLoading={isLoading}
+      searchBarPlaceholder="Search tabs..."
+      throttle={true}
+    >
+      {sortedTabs?.map((tab) => (
         <List.Item
-          key={`${tab.url}-${index}`}
+          key={tab.url}
           title={tab.title || "Untitled"}
-          subtitle={tab.url}
-          icon={tab.favicon || Icon.Globe}
+          subtitle={new URL(tab.url).hostname}
           accessories={[
-            { text: `#${index + 1}` },
-            { text: new Date(tab.lastAccessed).toLocaleTimeString() },
-            // Visit count removed as per requirements
-            // Add indicator if this is a recently accessed tab (within last hour)
-            ...(Date.now() - tab.lastAccessed < 60 * 60 * 1000 ? [{ text: "🕐", tooltip: "Recently accessed" }] : []),
+            { text: formatLastAccessed(tab.lastAccessed) },
+            { text: tab.accessCount ? `(${tab.accessCount})` : "" }
           ]}
+          icon={tab.favicon || Icon.Globe}
           actions={
             <ActionPanel>
               <Action
-                title="Focus Tab"
-                icon={Icon.Eye}
-                onAction={async () => {
-                  await focusOrOpenTab(tab.url, tab);
-                  await closeMainWindow({ clearRootSearch: true });
-                }}
+                title="Open Tab"
+                icon={Icon.ArrowRight}
+                onAction={() => handleTabSelection(tab)}
               />
-              <Action.CopyToClipboard content={tab.url} title="Copy URL" shortcut={{ modifiers: ["cmd"], key: "c" }} />
               <Action.CopyToClipboard
-                content={tab.title || "Untitled"}
-                title="Copy Title"
-                shortcut={{ modifiers: ["cmd", "shift"], key: "c" }}
+                title="Copy URL"
+                content={tab.url}
+                shortcut={{ modifiers: ["cmd"], key: "c" }}
               />
               <Action
-                title="Refresh List"
+                title="Refresh"
                 icon={Icon.ArrowClockwise}
                 shortcut={{ modifiers: ["cmd"], key: "r" }}
                 onAction={async () => {
-                  const toast = await showToast({
-                    style: Toast.Style.Animated,
-                    title: "Refreshing tab list...",
+                  await revalidate();
+                  await showToast({
+                    style: Toast.Style.Success,
+                    title: "Refreshed",
+                    message: "Tab data has been updated"
                   });
-
-                  await tabRefreshHandler.refreshImmediate();
-
-                  // Update toast after refresh
-                  setTimeout(() => {
-                    toast.style = Toast.Style.Success;
-                    toast.title = "Tab list refreshed";
-                  }, 500);
                 }}
               />
               <Action
                 title="Clear History"
                 icon={Icon.Trash}
+                style={Action.Style.Destructive}
                 shortcut={{ modifiers: ["cmd", "shift"], key: "delete" }}
                 onAction={async () => {
                   await tabHistoryManager.clearHistory();
+                  await revalidate();
                   await showToast({
                     style: Toast.Style.Success,
-                    title: "Tab history cleared",
-                  });
-                  revalidateHistory();
-                }}
-              />
-              <Action
-                title="Debug Info"
-                icon={Icon.Bug}
-                shortcut={{ modifiers: ["cmd", "shift"], key: "d" }}
-                onAction={async () => {
-                  const stats = tabHistoryManager.getStatistics();
-                  console.log("=== DEBUG INFO ===");
-                  console.log("Active tab:", activeTab);
-                  console.log("Total open tabs:", allTabs?.length);
-                  console.log("Tabs with history:", tabsWithHistory?.length);
-                  console.log("History statistics:", stats);
-                  console.log("All open tabs (raw):", allTabs);
-                  console.log("Sorted tabs count:", sortedTabs.length);
-                  console.log("==================");
-                  await showToast({
-                    style: Toast.Style.Success,
-                    title: "Debug info logged to console",
+                    title: "History Cleared",
+                    message: "All tab history has been cleared"
                   });
                 }}
               />
@@ -195,15 +171,28 @@ export default function Command() {
           }
         />
       ))}
-      {!isLoading && sortedTabs.length === 0 && (
+      
+      {!isLoading && (!sortedTabs || sortedTabs.length === 0) && (
         <List.EmptyView
-          title="No Recent Tabs Found"
-          description={
-            activeTab
-              ? `Current tab (${activeTab.title}) is hidden from this list. Use other tabs first to build up history.`
-              : "No tab history found. Browse some websites in Arc to build up your tab history."
+          title="No tabs found"
+          description="Make sure you have open tabs in your browser. The Chrome extension will track activity over time."
+          icon={Icon.Globe}
+          actions={
+            <ActionPanel>
+              <Action
+                title="Refresh"
+                icon={Icon.ArrowClockwise}
+                onAction={async () => {
+                  await revalidate();
+                  await showToast({
+                    style: Toast.Style.Success,
+                    title: "Refreshed",
+                    message: "Tab data has been updated"
+                  });
+                }}
+              />
+            </ActionPanel>
           }
-          icon={Icon.Clock}
         />
       )}
     </List>
