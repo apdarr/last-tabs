@@ -67,16 +67,17 @@ export class TabHistoryManager {
         for (const chromeTab of parsed.tabs) {
           if (chromeTab.url && chromeTab.lastAccessed) {
             const existing = this.historyCache.get(chromeTab.url);
-            if (!existing || existing.lastAccessed < chromeTab.lastAccessed) {
-              this.historyCache.set(chromeTab.url, {
-                url: chromeTab.url,
-                title: chromeTab.title || '',
-                lastAccessed: chromeTab.lastAccessed,
-                accessCount: existing ? existing.accessCount + 1 : 1,
-                favicon: chromeTab.favIconUrl // Use Chrome's favIconUrl for consistent favicons
-              });
-              mergedCount++;
-            }
+            
+            // Always update with Chrome extension data since it's the source of truth for recency
+            // But preserve access count if we have existing data
+            this.historyCache.set(chromeTab.url, {
+              url: chromeTab.url,
+              title: chromeTab.title || '',
+              lastAccessed: chromeTab.lastAccessed,
+              accessCount: existing ? existing.accessCount : 1, // Keep existing count or start at 1
+              favicon: chromeTab.favIconUrl
+            });
+            mergedCount++;
           }
         }
         console.log(`🔄 Merged ${mergedCount} entries from Chrome extension data`);

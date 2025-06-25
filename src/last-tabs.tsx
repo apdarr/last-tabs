@@ -46,9 +46,8 @@ export default function Command() {
     const tabsWithHistory = await tabHistoryManager.getTabHistory(currentTabs);
     console.log(`📚 Got history for ${tabsWithHistory.length} tabs`);
     
-    // Filter out only the active tab, but keep ALL other tabs (including ones without recency data)
-    const filteredTabs = tabsWithHistory
-      .filter(tab => !tab.active) // Only exclude active tab
+    // Show ALL tabs sorted by recency (no filtering)
+    const sortedTabs = tabsWithHistory
       .sort((a, b) => {
         // Sort by recency: tabs with lastAccessed > 0 go first (sorted by recency)
         // tabs with lastAccessed = 0 go after (no particular order)
@@ -59,8 +58,8 @@ export default function Command() {
       })
       .slice(0, 50); // Limit to top 50 for performance
     
-    console.log(`✅ Returning ${filteredTabs.length} tabs (including ${filteredTabs.filter(t => t.lastAccessed === 0).length} without recency data)`);
-    return filteredTabs;
+    console.log(`✅ Returning ${sortedTabs.length} tabs (including ${sortedTabs.filter(t => t.lastAccessed === 0).length} without recency data)`);
+    return sortedTabs;
   }, []);
 
   const handleTabSelection = async (tab: Tab) => {

@@ -48,18 +48,8 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 // Handle messages from popup and external requests
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'getTabHistory') {
-    // Get the currently active tab to exclude it from the popup display
-    chrome.tabs.query({ active: true, currentWindow: true })
-      .then(([activeTab]) => {
-        let historyToShow = tabAccessHistory;
-        if (activeTab && activeTab.url) {
-          historyToShow = tabAccessHistory.filter(tab => tab.url !== activeTab.url);
-        }
-        sendResponse({ tabs: historyToShow });
-      })
-      .catch(() => {
-        sendResponse({ tabs: tabAccessHistory });
-      });
+    // Send ALL tabs without filtering (append-only approach)
+    sendResponse({ tabs: tabAccessHistory });
     return true; // Will respond asynchronously
   } else if (request.action === 'clearHistory') {
     tabAccessHistory = [];
@@ -111,32 +101,19 @@ function updateTabHistory(tab) {
 async function saveTabHistory() {
   try {
     console.log('💾 Starting save process...');
-    // Get the currently active tab to exclude it from the history
-    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    console.log('🎯 Current active tab:', activeTab ? activeTab.url : 'none');
     
-    // Filter out the currently active tab from the history
-    let historyToSend = tabAccessHistory;
-    if (activeTab && activeTab.url) {
-      historyToSend = tabAccessHistory.filter(tab => tab.url !== activeTab.url);
-      console.log(`🔽 Filtered out active tab. Sending ${historyToSend.length} tabs (was ${tabAccessHistory.length})`);
-    } else {
-      console.log(`📤 Sending all ${historyToSend.length} tabs (no active tab to filter)`);
-    }
-    
-    // Save full history to Chrome storage (including current tab)
+    // Save full history to Chrome storage
     await chrome.storage.local.set({ tabHistory: tabAccessHistory });
     console.log('✅ Saved to Chrome storage');
     
-    // Send filtered data (excluding current tab) to local server for Raycast to read
+    // Send ALL tabs to Raycast (no filtering, append-only)
     const dataToSend = {
-      tabs: historyToSend,
-      lastUpdated: Date.now(),
-      excludedCurrentTab: activeTab ? activeTab.url : null
+      tabs: tabAccessHistory,
+      lastUpdated: Date.now()
     };
     
     try {
-      console.log('🌐 Sending to local server...');
+      console.log(`🌐 Sending ${tabAccessHistory.length} tabs to local server...`);
       const response = await fetch('http://127.0.0.1:8987/tabs', {
         method: 'POST',
         headers: {
@@ -179,25 +156,11 @@ async function loadTabHistory() {
 // Export data for native messaging (when requested by Raycast)
 chrome.runtime.onMessageExternal.addListener((request, sender, sendResponse) => {
   if (request.action === 'getTabHistory') {
-    chrome.tabs.query({ active: true, currentWindow: true })
-      .then(([activeTab]) => {
-        let historyToSend = tabAccessHistory;
-        if (activeTab && activeTab.url) {
-          historyToSend = tabAccessHistory.filter(tab => tab.url !== activeTab.url);
-        }
-        
-        sendResponse({
-          tabs: historyToSend,
-          lastUpdated: Date.now(),
-          excludedCurrentTab: activeTab ? activeTab.url : null
-        });
-      })
-      .catch(() => {
-        sendResponse({
-          tabs: tabAccessHistory,
-          lastUpdated: Date.now()
-        });
-      });
+    // Send ALL tabs without filtering (append-only approach)
+    sendResponse({
+      tabs: tabAccessHistory,
+      lastUpdated: Date.now()
+    });
     return true; // Will respond asynchronously
   }
 });
