@@ -59,14 +59,26 @@ export class TabHistoryManager {
 
   async mergeWithChromeExtensionData(): Promise<void> {
     try {
+      console.log("🔄 Reading Chrome extension data from file...");
       const chromeData = await fs.readFile(CHROME_EXTENSION_DATA_PATH, 'utf8');
       const parsed: ChromeExtensionData = JSON.parse(chromeData);
       
+      console.log(`📊 Chrome extension data: ${parsed.tabs?.length || 0} tabs, lastUpdated: ${parsed.lastUpdated ? new Date(parsed.lastUpdated).toLocaleTimeString() : 'N/A'}`);
+      
       if (parsed.tabs && Array.isArray(parsed.tabs)) {
         let mergedCount = 0;
+        let updatedCount = 0;
+        
         for (const chromeTab of parsed.tabs) {
           if (chromeTab.url && chromeTab.lastAccessed) {
             const existing = this.historyCache.get(chromeTab.url);
+            
+            // Check if this is actually an update
+            const isUpdate = existing && existing.lastAccessed !== chromeTab.lastAccessed;
+            if (isUpdate) {
+              console.log(`🔄 Updating ${chromeTab.url}: ${new Date(existing.lastAccessed).toLocaleTimeString()} → ${new Date(chromeTab.lastAccessed).toLocaleTimeString()}`);
+              updatedCount++;
+            }
             
             // Always update with Chrome extension data since it's the source of truth for recency
             // But preserve access count if we have existing data
@@ -80,7 +92,7 @@ export class TabHistoryManager {
             mergedCount++;
           }
         }
-        console.log(`🔄 Merged ${mergedCount} entries from Chrome extension data`);
+        console.log(`✅ Merged ${mergedCount} entries from Chrome extension data (${updatedCount} updated)`);
       }
     } catch (error) {
       console.log("📡 Chrome extension data not available or invalid:", error instanceof Error ? error.message : String(error));

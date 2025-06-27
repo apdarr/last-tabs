@@ -20,21 +20,21 @@ export class TabDataRefreshHandler {
     console.log("🔧 Refresh handler callbacks configured");
   }
 
-  // Record the current active tab when Raycast opens/closes
+  // Note: We rely solely on Chrome extension for tab access tracking
+  // This method is kept for potential future use but doesn't record access
   async recordCurrentActiveTab(): Promise<void> {
     try {
-      console.log("📝 Recording current active tab...");
+      console.log("📝 Checking current active tab (Chrome extension handles tracking)...");
       const allTabs = await getAllBrowserTabs();
       const activeTab = allTabs.find(tab => tab.active);
       
       if (activeTab) {
-        await tabHistoryManager.recordTabAccess(activeTab);
-        console.log(`✅ Recorded active tab: ${activeTab.title}`);
+        console.log(`ℹ️ Current active tab: ${activeTab.title}`);
       } else {
         console.log("⚠️ No active tab found");
       }
     } catch (error) {
-      console.error("❌ Failed to record active tab:", error);
+      console.error("❌ Failed to check active tab:", error);
     }
   }
 

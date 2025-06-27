@@ -25,6 +25,7 @@ export default function Command() {
   const canAccessBrowserExtension = environment.canAccess(BrowserExtension);
 
   // Fetch tabs using Raycast Browser Extension and merge with Chrome extension recency data
+  // Add polling every 3 seconds to pick up tab changes while Raycast is open
   const { data: sortedTabs, isLoading, revalidate } = usePromise(async () => {
     console.log("🔄 Fetching tabs...");
     
@@ -60,14 +61,18 @@ export default function Command() {
     
     console.log(`✅ Returning ${sortedTabs.length} tabs (including ${sortedTabs.filter(t => t.lastAccessed === 0).length} without recency data)`);
     return sortedTabs;
-  }, []);
+  }, [], { 
+    // Auto-refresh every 3 seconds to pick up tab changes while Raycast is open
+    refreshInterval: 3000,
+    // Don't execute initially if browser extension isn't available
+    execute: canAccessBrowserExtension
+  });
 
   const handleTabSelection = async (tab: Tab) => {
     try {
-      // Record this access in our history (updates Chrome extension data)
-      await tabHistoryManager.recordTabAccess(tab);
-      
       // Focus the tab using AppleScript
+      // Note: We rely solely on Chrome extension for recency tracking,
+      // not on Raycast selections, to reflect actual browser activity
       await focusOrOpenTab(tab.url, {
         title: tab.title,
         favicon: tab.favicon

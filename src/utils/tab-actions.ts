@@ -1,5 +1,4 @@
 import { smartFocusTab, Tab } from "./browser-tabs";
-import { tabHistoryManager } from "./tab-history";
 import { open } from "@raycast/api";
 
 export async function focusOrOpenTab(url: string, tabInfo?: Partial<Tab>): Promise<void> {
@@ -19,9 +18,6 @@ export async function focusOrOpenTab(url: string, tabInfo?: Partial<Tab>): Promi
     // Try to focus the existing tab using our smart focus utility
     await smartFocusTab(tab);
     
-    // Record this access in our history
-    await tabHistoryManager.recordTabAccess(tab);
-    
     console.log(`✅ Successfully focused tab: ${tab.title || url}`);
   } catch (error) {
     console.log(`⚠️ Could not focus existing tab, opening new one: ${error}`);
@@ -30,16 +26,6 @@ export async function focusOrOpenTab(url: string, tabInfo?: Partial<Tab>): Promi
     try {
       await open(url);
       console.log(`🔗 Opened URL in default browser: ${url}`);
-      
-      // Still record the access attempt
-      if (tabInfo) {
-        await tabHistoryManager.recordTabAccess({
-          id: '',
-          title: tabInfo.title || '',
-          url: url,
-          favicon: tabInfo.favicon
-        });
-      }
     } catch (openError) {
       console.error(`❌ Failed to open URL in browser:`, openError);
       throw new Error(`Could not focus or open tab: ${url}`);
