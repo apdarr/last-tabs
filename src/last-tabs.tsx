@@ -52,6 +52,9 @@ export default function Command() {
     }, [] as Tab[]);
     console.log(`🔗 Deduplicated to ${uniqueTabs.length} unique tabs`);
     
+    // CRITICAL: Sync ALL open tabs to file (ensures no tabs get lost)
+    await tabHistoryManager.syncAllTabsToFile(uniqueTabs);
+    
     // Get tab history with Chrome extension recency data
     const tabsWithHistory = await tabHistoryManager.getTabHistory(uniqueTabs);
     console.log(`📚 Got history for ${tabsWithHistory.length} tabs`);

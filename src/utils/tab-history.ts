@@ -231,6 +231,77 @@ export class TabHistoryManager {
       newestAccess: new Date(newestTime)
     };
   }
+
+  async syncAllTabsToFile(allOpenTabs: Tab[]): Promise<void> {
+    try {
+      console.log(`🔄 Syncing ${allOpenTabs.length} open tabs to file...`);
+      
+      // Read existing recency data from file
+      let existingRecencyData: Map<string, { lastAccessed: number; accessCount: number; favicon?: string }> = new Map();
+      try {
+        const chromeData = await fs.readFile(CHROME_EXTENSION_DATA_PATH, 'utf8');
+        const parsed: ChromeExtensionData = JSON.parse(chromeData);
+        if (parsed.tabs && Array.isArray(parsed.tabs)) {
+          for (const tab of parsed.tabs) {
+            if (tab.url && tab.lastAccessed) {
+              existingRecencyData.set(tab.url, {
+                lastAccessed: tab.lastAccessed,
+                accessCount: 1, // Chrome extension doesn't track count
+                favicon: tab.favIconUrl
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.log("📡 No existing recency data found or invalid, starting fresh");
+      }
+
+      // Create complete tab list with recency data
+      const completeTabList = allOpenTabs.map(tab => {
+        const recencyData = existingRecencyData.get(tab.url);
+        const historyEntry = this.historyCache.get(tab.url);
+        
+        return {
+          id: tab.id || Date.now().toString(),
+          title: tab.title || 'Untitled',
+          url: tab.url,
+          lastAccessed: recencyData?.lastAccessed || historyEntry?.lastAccessed || 0,
+          favIconUrl: recencyData?.favicon || historyEntry?.favicon || tab.favicon,
+          pinned: false
+        };
+      });
+
+      // Sort by recency and keep max 50
+      const sortedTabs = completeTabList
+        .sort((a, b) => b.lastAccessed - a.lastAccessed)
+        .slice(0, 50);
+
+      // Write complete list to file
+      const dataToWrite = {
+        tabs: sortedTabs,
+        lastUpdated: Date.now()
+      };
+
+      await fs.writeFile(CHROME_EXTENSION_DATA_PATH, JSON.stringify(dataToWrite, null, 2));
+      console.log(`✅ Synced ${sortedTabs.length} tabs to file (${sortedTabs.filter(t => t.lastAccessed > 0).length} with recency data)`);
+
+      // Also update our internal cache
+      for (const tab of sortedTabs) {
+        if (tab.lastAccessed > 0) {
+          this.historyCache.set(tab.url, {
+            url: tab.url,
+            title: tab.title,
+            lastAccessed: tab.lastAccessed,
+            accessCount: this.historyCache.get(tab.url)?.accessCount || 1,
+            favicon: tab.favIconUrl
+          });
+        }
+      }
+
+    } catch (error) {
+      console.error("❌ Error syncing tabs to file:", error);
+    }
+  }
 }
 
 // Global instance

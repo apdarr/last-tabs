@@ -2,6 +2,8 @@ This project's aim is to create a Raycast extension that allows a user to easily
 
 Don't over-engineer. Simpler approaches are bettery. If you think something might be overly complex, it probably is.
 
+I prefer an architecture that users listeners instead of polling for changes.
+
 Have a bias for leaning on Raycast's existing browser extension API, found here: https://developers.raycast.com/api-reference/browser-extension#browserextension.tab
 
 And furthermore, rely on using the Raycast extension developer guides (https://developers.raycast.com) and should prefer following Raycast conventions and best practices.

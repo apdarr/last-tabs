@@ -132,26 +132,33 @@ async function saveTabHistory() {
     await chrome.storage.local.set({ tabHistory: tabAccessHistory });
     console.log('✅ Saved to Chrome storage');
     
-    // Send ALL tabs to Raycast (no filtering, append-only)
-    const dataToSend = {
-      tabs: tabAccessHistory,
-      lastUpdated: Date.now()
+    // Send ONLY recency updates to Raycast (don't overwrite entire file)
+    const recencyUpdates = {
+      tabUpdates: tabAccessHistory.map(tab => ({
+        id: tab.id,
+        title: tab.title,
+        url: tab.url,
+        lastAccessed: tab.lastAccessed,
+        favIconUrl: tab.favIconUrl,
+        pinned: tab.pinned
+      })),
+      timestamp: Date.now()
     };
     
     try {
-      console.log(`🌐 Sending ${tabAccessHistory.length} tabs to local server...`);
-      const response = await fetch('http://127.0.0.1:8987/tabs', {
+      console.log(`🌐 Sending recency updates for ${tabAccessHistory.length} tabs to local server...`);
+      const response = await fetch('http://127.0.0.1:8987/update-recency', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(dataToSend)
+        body: JSON.stringify(recencyUpdates)
       });
       
       if (response.ok) {
-        console.log('✅ Tab history sent to Raycast server successfully');
+        console.log('✅ Recency updates sent to Raycast server successfully');
       } else {
-        console.error('❌ Failed to send tab history to server:', response.status);
+        console.error('❌ Failed to send recency updates to server:', response.status);
       }
     } catch (fetchError) {
       // Server might not be running, that's okay
