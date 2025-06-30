@@ -34,13 +34,39 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
   }
 });
 
-// Only track tab updates when they become active (not on every page load)
+// Track new tab creation (links from Slack, email, right-click "Open in new tab", etc.)
+chrome.tabs.onCreated.addListener(async (tab) => {
+  console.log('🆕 New tab created:', tab.id, tab.url);
+  
+  // New tabs might not have a URL yet, so we wait for onUpdated to handle them
+  if (tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://')) {
+    console.log('✅ New tab has valid URL, updating history immediately');
+    updateTabHistory(tab);
+    await saveTabHistory();
+  } else {
+    console.log('⏳ New tab has no URL yet or invalid URL, will track when URL loads');
+  }
+});
+
+// Track tab updates (URL changes, page loads)
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  // Only update if tab became active AND the URL changed
-  if (changeInfo.status === 'complete' && tab.active && changeInfo.url && tab.url) {
-    console.log('🔄 Active tab URL changed:', tab.url);
-    if (!tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://')) {
+  // Handle several scenarios:
+  // 1. New tab gets a URL for the first time (status: 'complete', url changed)
+  // 2. Active tab navigates to new URL (status: 'complete', url changed, tab.active)
+  // 3. Any tab finishes loading (status: 'complete')
+  
+  if (changeInfo.status === 'complete' && tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://')) {
+    console.log('🔄 Tab updated:', tabId, 'URL:', tab.url, 'Active:', tab.active);
+    
+    // Only track if:
+    // - Tab is currently active (user navigated)
+    // - OR the URL changed (new tab got its URL, or navigation happened)
+    if (tab.active || changeInfo.url) {
+      console.log('✅ Tab update qualifies for tracking');
       updateTabHistory(tab);
+      await saveTabHistory();
+    } else {
+      console.log('⏭️ Tab update does not qualify for tracking (not active, no URL change)');
     }
   }
 });

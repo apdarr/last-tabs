@@ -43,8 +43,17 @@ export default function Command() {
     const currentTabs = await getAllBrowserTabs();
     console.log(`📱 Found ${currentTabs.length} current tabs from Browser Extension`);
     
+    // Deduplicate tabs by URL to prevent React key conflicts
+    const uniqueTabs = currentTabs.reduce((acc, tab) => {
+      if (!acc.find(existing => existing.url === tab.url)) {
+        acc.push(tab);
+      }
+      return acc;
+    }, [] as Tab[]);
+    console.log(`🔗 Deduplicated to ${uniqueTabs.length} unique tabs`);
+    
     // Get tab history with Chrome extension recency data
-    const tabsWithHistory = await tabHistoryManager.getTabHistory(currentTabs);
+    const tabsWithHistory = await tabHistoryManager.getTabHistory(uniqueTabs);
     console.log(`📚 Got history for ${tabsWithHistory.length} tabs`);
     
     // Show ALL tabs sorted by recency (no filtering)
@@ -61,12 +70,7 @@ export default function Command() {
     
     console.log(`✅ Returning ${sortedTabs.length} tabs (including ${sortedTabs.filter(t => t.lastAccessed === 0).length} without recency data)`);
     return sortedTabs;
-  }, [], { 
-    // Auto-refresh every 3 seconds to pick up tab changes while Raycast is open
-    refreshInterval: 3000,
-    // Don't execute initially if browser extension isn't available
-    execute: canAccessBrowserExtension
-  });
+  }, []);
 
   const handleTabSelection = async (tab: Tab) => {
     try {
