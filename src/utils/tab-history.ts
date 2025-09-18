@@ -1,0 +1,308 @@
+import { LocalStorage } from "@raycast/api";
+import { Tab, TabWithHistory } from "./browser-tabs";
+import os from "os";
+import path from "path";
+import { promises as fs } from "fs";
+
+const HISTORY_KEY = "tab-access-history";
+const MAX_HISTORY_ENTRIES = 100;
+const CHROME_EXTENSION_DATA_PATH = path.join(os.homedir(), ".raycast-last-tabs.json");
+
+interface TabHistoryEntry {
+  url: string;
+  title: string;
+  lastAccessed: number;
+  accessCount: number;
+  favicon?: string;
+}
+
+interface ChromeExtensionTab {
+  id: number;
+  title: string;
+  url: string;
+  lastAccessed: number;
+  favIconUrl?: string;
+}
+
+interface ChromeExtensionData {
+  tabs: ChromeExtensionTab[];
+  lastUpdated: number;
+}
+
+export class TabHistoryManager {
+  private historyCache: Map<string, TabHistoryEntry> = new Map();
+  private initialized = false;
+
+  async initialize(): Promise<void> {
+    if (this.initialized) return;
+    
+    try {
+      // Load existing history from LocalStorage
+      const historyData = await LocalStorage.getItem<string>(HISTORY_KEY);
+      if (historyData) {
+        const entries: TabHistoryEntry[] = JSON.parse(historyData);
+        for (const entry of entries) {
+          this.historyCache.set(entry.url, entry);
+        }
+        console.log(`📚 Loaded ${entries.length} tab history entries from LocalStorage`);
+      }
+      
+      // Merge with Chrome extension data if available
+      await this.mergeWithChromeExtensionData();
+      
+      this.initialized = true;
+    } catch (error) {
+      console.error("Error initializing tab history:", error);
+      this.initialized = true; // Don't block the app
+    }
+  }
+
+  async mergeWithChromeExtensionData(): Promise<void> {
+    try {
+      console.log("🔄 Reading Chrome extension data from file...");
+      const chromeData = await fs.readFile(CHROME_EXTENSION_DATA_PATH, 'utf8');
+      const parsed: ChromeExtensionData = JSON.parse(chromeData);
+      
+      console.log(`📊 Chrome extension data: ${parsed.tabs?.length || 0} tabs, lastUpdated: ${parsed.lastUpdated ? new Date(parsed.lastUpdated).toLocaleTimeString() : 'N/A'}`);
+      
+      if (parsed.tabs && Array.isArray(parsed.tabs)) {
+        let mergedCount = 0;
+        let updatedCount = 0;
+        
+        for (const chromeTab of parsed.tabs) {
+          if (chromeTab.url && chromeTab.lastAccessed) {
+            const existing = this.historyCache.get(chromeTab.url);
+            
+            // Check if this is actually an update
+            const isUpdate = existing && existing.lastAccessed !== chromeTab.lastAccessed;
+            if (isUpdate) {
+              console.log(`🔄 Updating ${chromeTab.url}: ${new Date(existing.lastAccessed).toLocaleTimeString()} → ${new Date(chromeTab.lastAccessed).toLocaleTimeString()}`);
+              updatedCount++;
+            }
+            
+            // Always update with Chrome extension data since it's the source of truth for recency
+            // But preserve access count if we have existing data
+            this.historyCache.set(chromeTab.url, {
+              url: chromeTab.url,
+              title: chromeTab.title || '',
+              lastAccessed: chromeTab.lastAccessed,
+              accessCount: existing ? existing.accessCount : 1, // Keep existing count or start at 1
+              favicon: chromeTab.favIconUrl
+            });
+            mergedCount++;
+          }
+        }
+        console.log(`✅ Merged ${mergedCount} entries from Chrome extension data (${updatedCount} updated)`);
+      }
+    } catch (error) {
+      console.log("📡 Chrome extension data not available or invalid:", error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async recordTabAccess(tab: Tab): Promise<void> {
+    if (!this.initialized) await this.initialize();
+    
+    const now = Date.now();
+    const existing = this.historyCache.get(tab.url);
+    
+    const entry: TabHistoryEntry = {
+      url: tab.url,
+      title: tab.title,
+      lastAccessed: now,
+      accessCount: existing ? existing.accessCount + 1 : 1,
+      favicon: tab.favicon
+    };
+    
+    this.historyCache.set(tab.url, entry);
+    
+    // Persist to LocalStorage (async, non-blocking)
+    this.persistHistory().catch(error => 
+      console.error("Failed to persist tab history:", error)
+    );
+    
+    console.log(`📝 Recorded access to: ${tab.title}`);
+  }
+
+  async getTabHistory(currentTabs: Tab[]): Promise<TabWithHistory[]> {
+    if (!this.initialized) await this.initialize();
+    
+    // Refresh Chrome extension data before getting history - this is critical for accurate recency
+    await this.mergeWithChromeExtensionData();
+    
+    const tabsWithHistory: TabWithHistory[] = [];
+    
+    for (const tab of currentTabs) {
+      const historyEntry = this.historyCache.get(tab.url);
+      
+      tabsWithHistory.push({
+        ...tab,
+        lastAccessed: historyEntry?.lastAccessed || 0,
+        accessCount: historyEntry?.accessCount || 0,
+        // Ensure favicon is always set (prioritize Chrome extension data)
+        favicon: historyEntry?.favicon || tab.favicon
+      });
+    }
+    
+    // Sort by last accessed time (most recent first)
+    return tabsWithHistory.sort((a, b) => b.lastAccessed - a.lastAccessed);
+  }
+
+  async getRecentTabs(limit: number = 20): Promise<TabHistoryEntry[]> {
+    if (!this.initialized) await this.initialize();
+    
+    await this.mergeWithChromeExtensionData();
+    
+    return Array.from(this.historyCache.values())
+      .sort((a, b) => b.lastAccessed - a.lastAccessed)
+      .slice(0, limit);
+  }
+
+  private async persistHistory(): Promise<void> {
+    try {
+      const entries = Array.from(this.historyCache.values())
+        .sort((a, b) => b.lastAccessed - a.lastAccessed)
+        .slice(0, MAX_HISTORY_ENTRIES);
+      
+      await LocalStorage.setItem(HISTORY_KEY, JSON.stringify(entries));
+    } catch (error) {
+      console.error("Failed to save tab history:", error);
+    }
+  }
+
+  async clearHistory(): Promise<void> {
+    this.historyCache.clear();
+    await LocalStorage.removeItem(HISTORY_KEY);
+    console.log("🗑️ Tab history cleared");
+  }
+
+  async exportHistory(): Promise<string> {
+    if (!this.initialized) await this.initialize();
+    
+    const entries = Array.from(this.historyCache.values());
+    return JSON.stringify(entries, null, 2);
+  }
+
+  async importHistory(jsonData: string): Promise<void> {
+    try {
+      const entries: TabHistoryEntry[] = JSON.parse(jsonData);
+      for (const entry of entries) {
+        if (entry.url && entry.lastAccessed) {
+          this.historyCache.set(entry.url, entry);
+        }
+      }
+      await this.persistHistory();
+      console.log(`📥 Imported ${entries.length} tab history entries`);
+    } catch (error) {
+      console.error("Failed to import tab history:", error);
+      throw error;
+    }
+  }
+
+  // Get statistics about tab usage
+  getStatistics(): {
+    totalTabs: number;
+    mostAccessed: TabHistoryEntry | null;
+    oldestAccess: Date | null;
+    newestAccess: Date | null;
+  } {
+    const entries = Array.from(this.historyCache.values());
+    
+    if (entries.length === 0) {
+      return {
+        totalTabs: 0,
+        mostAccessed: null,
+        oldestAccess: null,
+        newestAccess: null
+      };
+    }
+    
+    const mostAccessed = entries.reduce((max, entry) => 
+      entry.accessCount > max.accessCount ? entry : max
+    );
+    
+    const times = entries.map(e => e.lastAccessed);
+    const oldestTime = Math.min(...times);
+    const newestTime = Math.max(...times);
+    
+    return {
+      totalTabs: entries.length,
+      mostAccessed,
+      oldestAccess: new Date(oldestTime),
+      newestAccess: new Date(newestTime)
+    };
+  }
+
+  async syncAllTabsToFile(allOpenTabs: Tab[]): Promise<void> {
+    try {
+      console.log(`🔄 Syncing ${allOpenTabs.length} open tabs to file...`);
+      
+      // Read existing recency data from file
+      let existingRecencyData: Map<string, { lastAccessed: number; accessCount: number; favicon?: string }> = new Map();
+      try {
+        const chromeData = await fs.readFile(CHROME_EXTENSION_DATA_PATH, 'utf8');
+        const parsed: ChromeExtensionData = JSON.parse(chromeData);
+        if (parsed.tabs && Array.isArray(parsed.tabs)) {
+          for (const tab of parsed.tabs) {
+            if (tab.url && tab.lastAccessed) {
+              existingRecencyData.set(tab.url, {
+                lastAccessed: tab.lastAccessed,
+                accessCount: 1, // Chrome extension doesn't track count
+                favicon: tab.favIconUrl
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.log("📡 No existing recency data found or invalid, starting fresh");
+      }
+
+      // Create complete tab list with recency data
+      const completeTabList = allOpenTabs.map(tab => {
+        const recencyData = existingRecencyData.get(tab.url);
+        const historyEntry = this.historyCache.get(tab.url);
+        
+        return {
+          id: tab.id || Date.now().toString(),
+          title: tab.title || 'Untitled',
+          url: tab.url,
+          lastAccessed: recencyData?.lastAccessed || historyEntry?.lastAccessed || 0,
+          favIconUrl: recencyData?.favicon || historyEntry?.favicon || tab.favicon,
+          pinned: false
+        };
+      });
+
+      // Sort by recency and keep max 50
+      const sortedTabs = completeTabList
+        .sort((a, b) => b.lastAccessed - a.lastAccessed)
+        .slice(0, 50);
+
+      // Write complete list to file
+      const dataToWrite = {
+        tabs: sortedTabs,
+        lastUpdated: Date.now()
+      };
+
+      await fs.writeFile(CHROME_EXTENSION_DATA_PATH, JSON.stringify(dataToWrite, null, 2));
+      console.log(`✅ Synced ${sortedTabs.length} tabs to file (${sortedTabs.filter(t => t.lastAccessed > 0).length} with recency data)`);
+
+      // Also update our internal cache
+      for (const tab of sortedTabs) {
+        if (tab.lastAccessed > 0) {
+          this.historyCache.set(tab.url, {
+            url: tab.url,
+            title: tab.title,
+            lastAccessed: tab.lastAccessed,
+            accessCount: this.historyCache.get(tab.url)?.accessCount || 1,
+            favicon: tab.favIconUrl
+          });
+        }
+      }
+
+    } catch (error) {
+      console.error("❌ Error syncing tabs to file:", error);
+    }
+  }
+}
+
+// Global instance
+export const tabHistoryManager = new TabHistoryManager();
