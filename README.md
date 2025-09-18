@@ -13,8 +13,8 @@ It supports up to 50 entries. Currently it only works with Arc.app but planning 
 - Clone or download this repository
 - Install dependencies: `npm install`
 - Build the extension: `npm run build`
-- Add the chrome extension to your browser and run the extension: 
-   - In Arc.app, go to `chrome://extensions/`, enable developer mode, and load the unpacked extension from the `chrome-extension` folder.
+- Add the Chrome extension to your browser and run the extension: 
+   - In Arc.app, go to `chrome://extensions/`, enable developer mode, and [load the unpacked extension](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world) from the `chrome-extension` folder.
    - Navigate to the `chrome-extension` folder in your terminal and run `npm start` to start the tab server. 
 
 When you run the app, tab history will be stored in a `.raycast-last-tabs.json` file in the root of your home directory. 
