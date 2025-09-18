@@ -1,6 +1,6 @@
 This project's aim is to create a Raycast extension that allows a user to easily view last accessed tabs in a Chromium browser. 
 
-Don't over-engineer. Simpler approaches are bettery. If you think something might be overly complex, it probably is.
+Don't over-engineer. Simpler approaches are better. If you think something might be overly complex, it probably is.
 
 I prefer an architecture that uses listeners instead of polling for changes.
 
