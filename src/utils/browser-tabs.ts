@@ -39,7 +39,7 @@ export async function getAllBrowserTabs(): Promise<Tab[]> {
     return tabs;
   } catch (error) {
     console.log("🔴 Browser Extension: Failed to get tabs", error);
-    console.log("� Make sure the Raycast Browser Extension is installed");
+    console.log("⚠️ Make sure the Raycast Browser Extension is installed");
     return [];
   }
 }
