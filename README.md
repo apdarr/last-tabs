@@ -6,7 +6,11 @@ Like anyone, I'm constantly switching between multiple tabs during my day. It's 
 
 This Raycast extension aims to provide that quick tab switching experience, allowing you to access your opened and most recently used tabs _without_ needing to be focused on the browser. 
 
-It supports up to 50 entries. Currently it only works with Arc.app but planning to add support for Chrome and Safari in the future.
+It supports up to 50 entries. 
+
+## Platforms
+
+Currently only supports Chrome and Arc on macOS
 
 ## Installation
 
@@ -14,7 +18,7 @@ It supports up to 50 entries. Currently it only works with Arc.app but planning 
 - Install dependencies: `npm install`
 - Build the extension: `npm run build`
 - Add the Chrome extension to your browser and run the extension: 
-   - In Arc.app, go to `chrome://extensions/`, enable developer mode, and [load the unpacked extension](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world) from the `chrome-extension` folder.
+   - In Arc or Chrome, go to `chrome://extensions/`, enable developer mode, and [load the unpacked extension](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world) from the `chrome-extension` folder.
    - Navigate to the `chrome-extension` folder in your terminal and run `npm start` to start the tab server. 
 
 When you run the app, tab history will be stored in a `.raycast-last-tabs.json` file in the root of your home directory. 
@@ -25,8 +29,8 @@ Because of this second extension dependency, I don't plan to publish this extens
 
 ## Future improvements
 
-- Add support for Chrome.app and Safari.app.
+- Add support for Safari.
 - When switching between tabs, sometimes the tab that a user is currently viewing is listed first. Figure out a way to address this.
 - Add test suite.
 - Revisit `Action.` commands to mirror other extensions like the Clipboard Manager extension.
-- Find alternatives to using `.raycast-last-tabs.json` file, or save it in the project's root directory instead of the user's home directory.
+- Alternatives to using a `.raycast-last-tabs.json` in the user's home directory?
